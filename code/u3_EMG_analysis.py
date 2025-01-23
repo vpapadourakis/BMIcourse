@@ -5,7 +5,8 @@ from scipy.io import wavfile
 from scipy.signal import medfilt
 
 date=[ "250117", ]
-subject=["AM", "GS", "KK", "KN", "LG", "MG", "MK","MP", "OG", "SM", "KM", "PA", "VK",]
+subject = ["PA"]
+# subject=["AM", "GS", "KK", "KN", "LG", "MG", "MK","MP", "OG", "SM", "KM", "PA", "VK",]
 
 def plot_wav_with_timestamps(wav_path, events_path, event_id="2"):
     # read the WAV file
@@ -25,18 +26,17 @@ def plot_wav_with_timestamps(wav_path, events_path, event_id="2"):
         print(f"No events found with ID={event_id}.")
 
     # discard data that are before the start of the task
-    data = data[time_axis>=(events[0]-10)]
+    data = data[(time_axis>=(events[0]-10)) & (time_axis<=(events[0]+60))]
     duration = len(data) / samplerate
     time_axis = np.linspace(0, duration, num=len(data))
-    events[0] = 10
+    events[0] = 10 # after discarding data, marker will always be at 10 seconds
 
     # add the 10 second offset for each task epoch
     events_to_plot = [events[0] + 10 * i for i in range(6)]
     
-
     # rectify and smooth data
     data_abs=np.abs(data)
-    window_size = 101
+    window_size = 501
     kernel = np.ones(window_size) / window_size
     data_smooth = np.convolve(data_abs, kernel, mode='same')
     # data_smooth = medfilt(data_abs, kernel_size=window_size)
@@ -44,11 +44,25 @@ def plot_wav_with_timestamps(wav_path, events_path, event_id="2"):
     processed_data = data_smooth
 
     # find appropriate threshold and find indices where data crosses threshold
-    threshold = 0.1*np.max(data)
+    threshold = 0.05*np.max(data)
     mask = data > threshold
 
-    proc_threshold = 0.1*np.max(processed_data)
+    proc_threshold = 0.05*np.max(processed_data)
     proc_mask = processed_data > proc_threshold
+
+    #compute RMS instead of smoothing
+    # Choose a window size in samples (e.g. 50 ms window at 1000 Hz -> 50 samples)
+    window_ms = 100  # 50 ms
+    window_size = int(window_ms * samplerate / 1000)  # convert ms to number of samples
+    
+    emg_rms = compute_rms(data_abs, window_size=window_size)
+    
+    # Because we computed RMS in a sliding window, we have fewer samples:
+    # the length of emg_rms is len(emg_rectified) - window_size + 1
+    # We'll trim the 'force' array and 'time' array to match
+    time_trimmed = time_axis[window_size - 1:]
+
+    force_level = 1
 
     # this creates a mask based on time 
     # mask = (time_axis >= events_to_plot[0]) & (time_axis <= events_to_plot[1])
@@ -66,7 +80,7 @@ def plot_wav_with_timestamps(wav_path, events_path, event_id="2"):
     
     #plot a red dot for every threshold crossing
     ax1.scatter(time_axis[mask], np.ones(np.sum(mask)) * threshold, 
-                color="red", marker=".", label=f">{threshold:.0f}", zorder=3)
+                s=5, color="red", marker=".", label=f">{threshold:.0f}", zorder=3)
    
     ax1.set_xlabel('Time (s)')
     ax1.set_ylabel('Amplitude')
@@ -79,13 +93,14 @@ def plot_wav_with_timestamps(wav_path, events_path, event_id="2"):
     
     # make a subplot of the processed EMG
     ax2.plot(time_axis, processed_data, label='processed EMG')
-    
+    # ax2.plot(time_trimmed, emg_rms, label='RMS')
+
     #plot a horizontal line at threshold
     ax2.axhline(y=proc_threshold, color="gray", linestyle="--", alpha=0.7)
     
     #plot a red dot for every threshold crossing
     ax2.scatter(time_axis[proc_mask], np.ones(np.sum(proc_mask)) * proc_threshold, 
-                color="red", marker=".", label=f">{proc_threshold:.0f}", zorder=3)
+                s=5, color="red", marker=".", label=f">{proc_threshold:.0f}", zorder=3)
    
     ax2.set_xlabel('Time (s)')
     ax2.set_ylabel('Amplitude')
@@ -102,6 +117,23 @@ def plot_wav_with_timestamps(wav_path, events_path, event_id="2"):
     plt.show(block=False)
     figurename = fr"figures\on_off_10s_{date}_{subject}.png"       
     plt.savefig(figurename, dpi=300, bbox_inches='tight')
+
+def compute_rms(signal, window_size):
+    """
+    Compute the RMS of a 1D signal using a moving window.
+
+    :param signal: 1D numpy array of EMG data
+    :param window_size: number of samples in the RMS window
+    :return: numpy array of RMS values (length = len(signal) - window_size + 1)
+    """
+    rms_values = []
+    # Slide the window across the signal
+    for i in range(len(signal) - window_size + 1):
+        window = signal[i : i + window_size]
+        # RMS calculation
+        rms_val = np.sqrt(np.mean(window**2))
+        rms_values.append(rms_val)
+    return np.array(rms_values)
 
 def read_events(filename, marker_id_to_return):
     events = []
