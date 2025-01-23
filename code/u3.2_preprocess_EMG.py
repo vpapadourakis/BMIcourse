@@ -37,23 +37,15 @@ def plot_wav_with_timestamps(wav_path, events_path, event_id="2"):
     events_to_plot = [events[0] + 10 * i for i in range(6)]
     
     # rectify and smooth data
-    data_abs=np.abs(data)
-    window_size = 501
-    kernel = np.ones(window_size) / window_size
-    data_smooth = np.convolve(data_abs, kernel, mode='same')
-    # data_smooth = medfilt(data_abs, kernel_size=window_size)
-
-    processed_data = data_smooth
+    # ADD code here
+    processed_data = data
 
     # find appropriate threshold and find indices where data crosses threshold
-    threshold = 0.05*np.max(data)
+    threshold = 1000
     mask = data > threshold
 
-    proc_threshold = 0.05*np.max(processed_data)
+    proc_threshold = 1000
     proc_mask = processed_data > proc_threshold
-
-    # this creates a mask based on time 
-    # mask = (time_axis >= events_to_plot[0]) & (time_axis <= events_to_plot[1])
 
     # plot the EMG waveform
 
